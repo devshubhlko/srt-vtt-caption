@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="hi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON to SRT / VTT Converter</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 30px;
+            background: #f5f5f5;
+            color: #111;
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: auto;
+        }
+
+        h1 {
+            margin: 0 0 20px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .box {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 500px;
+            resize: vertical;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 7px;
+            outline: none;
+            font-family: Consolas, monospace;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        textarea:focus {
+            border-color: #111;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        button {
+            border: 0;
+            padding: 11px 18px;
+            border-radius: 7px;
+            background: #111;
+            color: #fff;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        button:hover {
+            opacity: .85;
+        }
+
+        button.green {
+            background: #16803c;
+        }
+
+        button.gray {
+            background: #555;
+        }
+
+        button.red {
+            background: #b42318;
+        }
+
+        .status {
+            margin-top: 12px;
+            font-size: 14px;
+            color: #555;
+            min-height: 20px;
+        }
+
+        .format {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .format button.active {
+            background: #16803c;
+        }
+
+        @media(max-width:800px) {
+            body {
+                padding: 15px;
+            }
+
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            textarea {
+                min-height: 400px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+  <div style="margin-bottom: 20px; text-align: center; background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+    <a href="index.html" style="margin-right: 15px; text-decoration: none; color: #666; font-weight: normal;">Veed Caption (Default)</a>
+    <a href="kapwing-caption.html" style="text-decoration: none; font-weight: bold; color: #007bff;">Kapwing Caption</a>
+  </div>
+
+    <div class="container">
+
+        <h1>JSON → SRT / VTT Converter</h1>
+
+        <div class="grid">
+
+            <!-- JSON INPUT -->
+            <div class="box">
+
+                <label>JSON Input</label>
+
+                <textarea id="jsonInput" placeholder="Paste your JSON here..."></textarea>
+
+                <div class="controls">
+                    <button onclick="generateSubtitles()">Generate</button>
+                    <button class="gray" onclick="loadSample()">Sample</button>
+                    <button class="red" onclick="clearAll()">Clear</button>
+                </div>
+
+                <div id="status" class="status"></div>
+
+            </div>
+
+
+            <!-- OUTPUT -->
+            <div class="box">
+
+                <label>Subtitle Output</label>
+
+                <div class="format">
+                    <button id="srtBtn" class="active" onclick="setFormat('srt')">
+                        SRT
+                    </button>
+
+                    <button id="vttBtn" onclick="setFormat('vtt')">
+                        VTT
+                    </button>
+                </div>
+
+                <textarea id="output" placeholder="Generated subtitle will appear here..."></textarea>
+
+                <div class="controls">
+                    <button class="green" onclick="downloadSubtitle()">
+                        Download
+                    </button>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <script>
+
+        let currentFormat = "srt";
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | TIME FORMAT
+        |--------------------------------------------------------------------------
+        */
+
+        function formatTime(seconds, format) {
+
+            seconds = Number(seconds);
+
+            if (!Number.isFinite(seconds)) {
+                seconds = 0;
+            }
+
+            const hours = Math.floor(seconds / 3600);
+
+            const minutes = Math.floor(
+                (seconds % 3600) / 60
+            );
+
+            const secs = Math.floor(
+                seconds % 60
+            );
+
+            const milliseconds = Math.round(
+                (seconds - Math.floor(seconds)) * 1000
+            );
+
+
+            if (format === "srt") {
+
+                return (
+                    String(hours).padStart(2, "0") +
+                    ":" +
+                    String(minutes).padStart(2, "0") +
+                    ":" +
+                    String(secs).padStart(2, "0") +
+                    "," +
+                    String(milliseconds).padStart(3, "0")
+                );
+
+            }
+
+
+            return (
+                String(hours).padStart(2, "0") +
+                ":" +
+                String(minutes).padStart(2, "0") +
+                ":" +
+                String(secs).padStart(2, "0") +
+                "." +
+                String(milliseconds).padStart(3, "0")
+            );
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | FIND WORDS ARRAY
+        |--------------------------------------------------------------------------
+        */
+
+        function findWords(obj) {
+
+            if (!obj || typeof obj !== "object") {
+                return null;
+            }
+
+
+            if (Array.isArray(obj.words)) {
+                return obj.words;
+            }
+
+
+            if (
+                obj.result &&
+                obj.result.data &&
+                obj.result.data.response &&
+                Array.isArray(obj.result.data.response.words)
+            ) {
+
+                return obj.result.data.response.words;
+
+            }
+
+
+            for (const key in obj) {
+
+                if (
+                    obj[key] &&
+                    typeof obj[key] === "object"
+                ) {
+
+                    const found = findWords(obj[key]);
+
+                    if (found) {
+                        return found;
+                    }
+
+                }
+
+            }
+
+
+            return null;
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | GENERATE SUBTITLES
+        |--------------------------------------------------------------------------
+        */
+
+        function generateSubtitles() {
+
+            const input =
+                document.getElementById("jsonInput").value.trim();
+
+            const status =
+                document.getElementById("status");
+
+            const output =
+                document.getElementById("output");
+
+
+            if (!input) {
+
+                status.textContent =
+                    "JSON paste karo.";
+
+                output.value = "";
+
+                return;
+            }
+
+
+            let json;
+
+
+            try {
+
+                json = JSON.parse(input);
+
+            } catch (error) {
+
+                status.textContent =
+                    "Invalid JSON!";
+
+                output.value = "";
+
+                return;
+            }
+
+
+            const words = findWords(json);
+
+
+            if (!words || !words.length) {
+
+                status.textContent =
+                    "words array nahi mila.";
+
+                output.value = "";
+
+                return;
+            }
+
+
+            const validWords = words.filter(item => {
+
+                return (
+                    item &&
+                    typeof item.word === "string" &&
+                    Number.isFinite(Number(item.start_time)) &&
+                    Number.isFinite(Number(item.end_time))
+                );
+
+            });
+
+
+            if (!validWords.length) {
+
+                status.textContent =
+                    "Valid word timing data nahi mila.";
+
+                output.value = "";
+
+                return;
+            }
+
+
+            const subtitles = [];
+
+            let group = [];
+
+
+            function pushGroup() {
+
+                if (!group.length) {
+                    return;
+                }
+
+
+                const text =
+                    group
+                        .map(item => item.word.trim())
+                        .filter(Boolean)
+                        .join(" ");
+
+
+                if (!text) {
+
+                    group = [];
+
+                    return;
+                }
+
+
+                subtitles.push({
+
+                    start: Number(
+                        group[0].start_time
+                    ),
+
+                    end: Number(
+                        group[group.length - 1].end_time
+                    ),
+
+                    text: text
+
+                });
+
+
+                group = [];
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | SUBTITLE GROUPING
+            |--------------------------------------------------------------------------
+            */
+
+            const MAX_GAP = 2;
+
+
+            for (let i = 0; i < validWords.length; i++) {
+
+                const item = validWords[i];
+
+
+                if (!group.length) {
+
+                    group.push(item);
+
+                    continue;
+                }
+
+
+                const previous =
+                    group[group.length - 1];
+
+
+                const gap =
+                    Number(item.start_time) -
+                    Number(previous.end_time);
+
+
+                if (gap > MAX_GAP) {
+
+                    pushGroup();
+
+                }
+
+
+                group.push(item);
+
+            }
+
+
+            pushGroup();
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | CREATE SRT / VTT
+            |--------------------------------------------------------------------------
+            */
+
+            let result = "";
+
+
+            if (currentFormat === "vtt") {
+
+                result += "WEBVTT\n\n";
+
+            }
+
+
+            subtitles.forEach((subtitle, index) => {
+
+                if (currentFormat === "srt") {
+
+                    result +=
+                        (index + 1) +
+                        "\n" +
+
+                        formatTime(
+                            subtitle.start,
+                            "srt"
+                        ) +
+
+                        " --> " +
+
+                        formatTime(
+                            subtitle.end,
+                            "srt"
+                        ) +
+
+                        "\n" +
+
+                        subtitle.text +
+
+                        "\n\n";
+
+                } else {
+
+                    result +=
+                        (index + 1) +
+                        "\n" +
+
+                        formatTime(
+                            subtitle.start,
+                            "vtt"
+                        ) +
+
+                        " --> " +
+
+                        formatTime(
+                            subtitle.end,
+                            "vtt"
+                        ) +
+
+                        "\n" +
+
+                        subtitle.text +
+
+                        "\n\n";
+
+                }
+
+            });
+
+
+            output.value =
+                result.trim();
+
+
+            status.textContent =
+                validWords.length +
+                " words → " +
+                subtitles.length +
+                " subtitles generated.";
+
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | FORMAT SELECT
+        |--------------------------------------------------------------------------
+        */
+
+        function setFormat(format) {
+
+            currentFormat = format;
+
+
+            document
+                .getElementById("srtBtn")
+                .classList.remove("active");
+
+
+            document
+                .getElementById("vttBtn")
+                .classList.remove("active");
+
+
+            if (format === "srt") {
+
+                document
+                    .getElementById("srtBtn")
+                    .classList.add("active");
+
+            } else {
+
+                document
+                    .getElementById("vttBtn")
+                    .classList.add("active");
+
+            }
+
+
+            if (
+                document
+                    .getElementById("jsonInput")
+                    .value
+                    .trim()
+            ) {
+
+                generateSubtitles();
+
+            }
+
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | DOWNLOAD
+        |--------------------------------------------------------------------------
+        */
+
+        function downloadSubtitle() {
+
+            const output =
+                document.getElementById("output").value;
+
+
+            if (!output) {
+                return;
+            }
+
+
+            const extension =
+                currentFormat === "srt"
+                    ? "srt"
+                    : "vtt";
+
+
+            const mime =
+                currentFormat === "srt"
+                    ? "application/x-subrip"
+                    : "text/vtt";
+
+
+            const blob =
+                new Blob(
+                    [output],
+                    {
+                        type:
+                            mime +
+                            ";charset=utf-8"
+                    }
+                );
+
+
+            const url =
+                URL.createObjectURL(blob);
+
+
+            const link =
+                document.createElement("a");
+
+
+            link.href = url;
+
+            link.download =
+                "subtitle." +
+                extension;
+
+
+            document.body.appendChild(link);
+
+            link.click();
+
+            link.remove();
+
+
+            URL.revokeObjectURL(url);
+
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | SAMPLE
+        |--------------------------------------------------------------------------
+        */
+
+        function loadSample() {
+
+            const sample = {
+
+                result: {
+
+                    data: {
+
+                        response: {
+
+                            words: [
+
+                                {
+                                    word: "मेरी",
+                                    start_time: 18.88,
+                                    end_time: 19.24
+                                },
+
+                                {
+                                    word: "जिंदगी",
+                                    start_time: 19.66,
+                                    end_time: 20.5
+                                },
+
+                                {
+                                    word: "का",
+                                    start_time: 21.32,
+                                    end_time: 21.44
+                                },
+
+                                {
+                                    word: "सफल",
+                                    start_time: 23.84,
+                                    end_time: 24.38
+                                },
+
+                                {
+                                    word: "खो",
+                                    start_time: 24.6,
+                                    end_time: 24.7
+                                },
+
+                                {
+                                    word: "गया",
+                                    start_time: 25.1,
+                                    end_time: 25.54
+                                },
+
+                                {
+                                    word: "है",
+                                    start_time: 26.32,
+                                    end_time: 26.4
+                                }
+
+                            ]
+
+                        }
+
+                    }
+
+                }
+
+            };
+
+
+            document.getElementById("jsonInput").value =
+                JSON.stringify(sample, null, 2);
+
+
+            generateSubtitles();
+
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | CLEAR
+        |--------------------------------------------------------------------------
+        */
+
+        function clearAll() {
+
+            document.getElementById("jsonInput").value = "";
+
+            document.getElementById("output").value = "";
+
+            document.getElementById("status").textContent = "";
+
+        }
+
+    </script>
+
+</body>
+
+</html>
