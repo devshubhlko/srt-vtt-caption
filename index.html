@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Veed Subtitle → VTT Converter</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      max-width: 1150px;
+      margin: 30px auto;
+      padding: 20px;
+      background: #f4f4f4;
+      color: #333;
+    }
+
+    h1 {
+      margin-bottom: 4px;
+      font-size: 24px;
+    }
+
+    p.sub {
+      color: #666;
+      margin-top: 0;
+      font-size: 14px;
+    }
+
+    /* -------- Tabs -------- */
+    .tabs {
+      display: flex;
+      gap: 6px;
+      margin-top: 20px;
+      border-bottom: 2px solid #e0e0e0;
+    }
+
+    .tab {
+      padding: 10px 20px;
+      font-size: 15px;
+      background: transparent;
+      border: none;
+      border-bottom: 3px solid transparent;
+      cursor: pointer;
+      color: #666;
+      font-weight: 500;
+      margin-bottom: -2px;
+      border-radius: 0;
+    }
+
+    .tab:hover {
+      color: #333;
+    }
+
+    .tab.active {
+      color: #4285f4;
+      border-bottom-color: #4285f4;
+    }
+
+    .tab-panel {
+      display: none;
+      padding-top: 16px;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    /* -------- Fetch form -------- */
+    .fetch-form {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 13px;
+      color: #555;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+
+    .field input[type=text] {
+      width: 100%;
+      padding: 12px 14px;
+      font-size: 14px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-family: monospace;
+      background: #fafafa;
+    }
+
+    .field input[type=text]:focus {
+      outline: none;
+      border-color: #4285f4;
+      background: #fff;
+    }
+
+    .field .hint {
+      font-size: 12px;
+      color: #888;
+      margin-top: 4px;
+    }
+
+    .field .hint code {
+      background: #eee;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 11px;
+    }
+
+    /* -------- Grid for output -------- */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    @media (max-width: 800px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .panel h2 {
+      margin: 0 0 10px;
+      font-size: 13px;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    textarea {
+      width: 100%;
+      flex: 1;
+      min-height: 380px;
+      padding: 12px;
+      font-family: "Consolas", "Monaco", monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      resize: vertical;
+      background: #fafafa;
+      color: #333;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: #4285f4;
+      background: #fff;
+    }
+
+    .controls {
+      margin-top: 15px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    button.btn {
+      padding: 12px 22px;
+      font-size: 15px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      background: #4285f4;
+      color: #fff;
+      font-weight: 500;
+    }
+
+    button.btn:hover {
+      background: #3367d6;
+    }
+
+    button.btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
+    button.btn.green {
+      background: #0f9d58;
+    }
+
+    button.btn.green:hover {
+      background: #0b8043;
+    }
+
+    button.btn.gray {
+      background: #5f6368;
+    }
+
+    button.btn.gray:hover {
+      background: #3c4043;
+    }
+
+    button.btn.red {
+      background: #ea4335;
+    }
+
+    button.btn.red:hover {
+      background: #c5221f;
+    }
+
+    .status {
+      margin-top: 15px;
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      background: #e8f0fe;
+      color: #1967d2;
+      border-left: 4px solid #4285f4;
+      white-space: pre-wrap;
+    }
+
+    .status.ok {
+      background: #e6f4ea;
+      color: #0d652d;
+      border-left-color: #0f9d58;
+    }
+
+    .status.err {
+      background: #fce8e6;
+      color: #c5221f;
+      border-left-color: #ea4335;
+    }
+
+    .status.warn {
+      background: #fef7e0;
+      color: #b06000;
+      border-left-color: #f9ab00;
+    }
+
+    .options {
+      margin-top: 12px;
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      font-size: 14px;
+      color: #555;
+    }
+
+    .options label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    .options input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    }
+
+    .small {
+      font-size: 12px;
+      color: #888;
+      margin-top: 6px;
+    }
+
+    /* spinner */
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: -2px;
+      margin-right: 6px;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* CORS notice */
+    .cors-note {
+      background: #fef7e0;
+      border-left: 4px solid #f9ab00;
+      padding: 14px 16px;
+      border-radius: 6px;
+      margin-top: 15px;
+      font-size: 13.5px;
+      color: #7a4f00;
+      line-height: 1.6;
+    }
+
+    .cors-note strong {
+      color: #b06000;
+    }
+
+    .cors-note code {
+      background: #fff8e1;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>🎬 Veed Subtitle → VTT Converter</h1>
+  <p class="sub">JSON paste karo ya Veed subtitle ID/URL se seedha fetch karo → VTT file download karo.</p>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" data-tab="fetch">🔗 ID / URL se Fetch</button>
+    <button class="tab" data-tab="paste">📋 JSON Paste</button>
+  </div>
+
+  <!-- Tab 1: Fetch -->
+  <div class="tab-panel active" id="panel-fetch">
+    <div class="fetch-form">
+      <div class="field">
+        <label>Veed Subtitle ID ya poora URL</label>
+        <input type="text" id="fetchInput"
+          placeholder="Enter ID Or URL">
+        <div class="hint">
+          Sirf ID bhi chalega. Base URL: <code>https://www.veed.io/api/v1/subtitles/</code>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn green" id="fetchBtn">🔗 Fetch & Convert</button>
+        <button class="btn gray" id="fetchClearBtn">🗑 Clear</button>
+      </div>
+
+      <div class="cors-note">
+        <strong>⚠️ Agar fetch fail ho (CORS error):</strong><br>
+        Veed ka API browser se direct call block kar sakta hai (CORS policy).
+        Us case mein:<br>
+        1. Naya tab kholo aur URL daalo: <code>https://www.veed.io/api/v1/subtitles/YOUR_ID</code><br>
+        2. Jo JSON dikhe, poora copy karo<br>
+        3. Yahan <strong>"JSON Paste"</strong> tab mein paste karo → Convert.
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab 2: Paste -->
+  <div class="tab-panel" id="panel-paste">
+    <div class="grid">
+      <div class="panel">
+        <h2>📥 Input JSON</h2>
+        <textarea id="input" placeholder='Yahan JSON paste karo... {"data":{"subtitles":{...}}}'></textarea>
+        <div class="small">Poora JSON ya sirf <code>subtitles</code> object — dono chalega.</div>
+      </div>
+      <div class="panel">
+        <h2>📤 Output VTT</h2>
+        <textarea id="output" placeholder="Yahan VTT output aayega..." readonly></textarea>
+        <div class="small" id="stat">0 cues</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Common options -->
+  <div class="options">
+    <label><input type="checkbox" id="optMerge"> Same text merge karo</label>
+    <label><input type="checkbox" id="optClean"> Repeated words saaf karo</label>
+    <label><input type="checkbox" id="optEndFix" checked> Gap fill karo</label>
+  </div>
+
+  <div class="controls">
+    <button class="btn green" id="convertBtn">🔄 Convert to VTT</button>
+    <button class="btn" id="downloadVtt" disabled>⬇️ Download VTT</button>
+    <button class="btn" id="downloadSrt" disabled>⬇️ Download SRT</button>
+    <button class="btn gray" id="copyBtn" disabled>📋 Copy</button>
+  </div>
+
+  <div class="status" id="status">ID daalo ya JSON paste karo, phir Convert dabao.</div>
+
+  <script>
+    /* ============================================================
+       Helpers
+       ============================================================ */
+    function formatTime(seconds) {
+      if (seconds < 0) seconds = 0;
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = Math.floor(seconds % 60);
+      const ms = Math.round((seconds - Math.floor(seconds)) * 1000);
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+    }
+
+    function cleanRepeatedWords(text) {
+      const words = text.trim().split(/\s+/);
+      const out = [];
+      for (let i = 0; i < words.length; i++) {
+        if (i === 0 || words[i].toLowerCase() !== words[i - 1].toLowerCase()) {
+          out.push(words[i]);
+        }
+      }
+      return out.join(' ');
+    }
+
+    function extractCues(json) {
+      let subs = null;
+      if (json?.data?.subtitles) subs = json.data.subtitles;
+      else if (json?.subtitles) subs = json.subtitles;
+      else if (typeof json === 'object' && !Array.isArray(json)) subs = json;
+
+      if (!subs) throw new Error('JSON mein "subtitles" field nahi mila.');
+
+      let items = Array.isArray(subs) ? subs : Object.values(subs);
+
+      const cues = items.map((item) => {
+        if (!item) return null;
+        let text = '';
+        if (Array.isArray(item.words)) {
+          text = item.words.map(w => w.value).join(' ').trim();
+        } else if (typeof item.text === 'string') {
+          text = item.text.trim();
+        } else if (typeof item.value === 'string') {
+          text = item.value.trim();
+        }
+        const from = Number(item.from ?? item.start ?? item.startTime ?? 0);
+        const to = Number(item.to ?? item.end ?? item.endTime ?? 0);
+        if (!text) return null;
+        return { from, to, text };
+      }).filter(Boolean);
+
+      cues.sort((a, b) => a.from - b.from);
+      return cues;
+    }
+
+    function buildVTT(cues, opts) {
+      let list = cues.map(c => ({ ...c }));
+
+      if (opts.clean) {
+        list.forEach(c => { c.text = cleanRepeatedWords(c.text); });
+      }
+
+      if (opts.merge) {
+        const merged = [];
+        for (const c of list) {
+          const last = merged[merged.length - 1];
+          if (last && last.text.toLowerCase() === c.text.toLowerCase()) {
+            last.to = c.to;
+          } else {
+            merged.push({ ...c });
+          }
+        }
+        list = merged;
+      }
+
+      if (opts.endFix) {
+        for (let i = 0; i < list.length - 1; i++) {
+          const gap = list[i + 1].from - list[i].to;
+          if (gap > 0 && gap < 3) {
+            list[i].to = list[i + 1].from - 0.001;
+          }
+        }
+      }
+
+      let vtt = 'WEBVTT\n\n';
+      list.forEach((c, i) => {
+        vtt += `${i + 1}\n`;
+        vtt += `${formatTime(c.from)} --> ${formatTime(c.to)}\n`;
+        vtt += `${c.text}\n\n`;
+      });
+
+      return { vtt: vtt.trim() + '\n', count: list.length };
+    }
+
+    function vttToSrt(vtt) {
+      return vtt
+        .replace(/^WEBVTT.*\n\n?/, '')
+        .replace(/(\d{2}:\d{2}:\d{2})\.(\d{3})/g, '$1,$2')
+        .trim() + '\n';
+    }
+
+    function download(content, filename, mime) {
+      const blob = new Blob([content], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    /* ============================================================
+       DOM
+       ============================================================ */
+    const fetchInput = document.getElementById('fetchInput');
+    const fetchBtn = document.getElementById('fetchBtn');
+    const fetchClear = document.getElementById('fetchClearBtn');
+    const inputEl = document.getElementById('input');
+    const outputEl = document.getElementById('output');
+    const statusEl = document.getElementById('status');
+    const statEl = document.getElementById('stat');
+    const convertBtn = document.getElementById('convertBtn');
+    const downloadVttBtn = document.getElementById('downloadVtt');
+    const downloadSrtBtn = document.getElementById('downloadSrt');
+    const copyBtn = document.getElementById('copyBtn');
+    const optMerge = document.getElementById('optMerge');
+    const optClean = document.getElementById('optClean');
+    const optEndFix = document.getElementById('optEndFix');
+
+    let currentVtt = '';
+
+    function setStatus(msg, type = '') {
+      statusEl.textContent = msg;
+      statusEl.className = 'status' + (type ? ' ' + type : '');
+    }
+
+    /* ============================================================
+       Tabs
+       ============================================================ */
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+      });
+    });
+
+    /* ============================================================
+       Fetch from Veed
+       ============================================================ */
+    function parseIdOrUrl(input) {
+      const trimmed = input.trim();
+      if (!trimmed) return null;
+
+      // Full URL?
+      try {
+        const u = new URL(trimmed);
+        const parts = u.pathname.split('/').filter(Boolean);
+        return parts[parts.length - 1] || null;
+      } catch (e) {
+        // Not a URL — treat as raw ID
+        return trimmed;
+      }
+    }
+
+    async function fetchFromVeed() {
+      const id = parseIdOrUrl(fetchInput.value);
+      if (!id) {
+        setStatus('⚠️ Pehle Veed ID ya URL daalo.', 'err');
+        return;
+      }
+
+      const url = 'https://www.veed.io/api/v1/subtitles/' + id;
+
+      fetchBtn.disabled = true;
+      fetchBtn.innerHTML = '<span class="spinner"></span>Fetching...';
+      setStatus('⏳ Fetching JSON from:\n' + url);
+
+      try {
+        const res = await fetch(url, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        });
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status} ${res.statusText}`);
+        }
+
+        const json = await res.json();
+
+        // JSON mila — paste tab pe bhej do
+        inputEl.value = JSON.stringify(json, null, 2);
+        setStatus('✅ JSON mil gayi! Ab "Convert to VTT" dabao (ya automatic ho jayega).', 'ok');
+
+        // Auto-convert
+        convert();
+
+        // Auto switch to paste tab so user sees the result
+        document.querySelector('.tab[data-tab="paste"]').click();
+
+      } catch (err) {
+        console.error(err);
+
+        let msg = '❌ Fetch fail: ' + err.message;
+        if (err.message.includes('Failed to fetch') || err.name === 'TypeError') {
+          msg += '\n\n👉 Yeh CORS block ho sakta hai. Solution:\n' +
+            '1. Naya tab kholo: ' + url + '\n' +
+            '2. Jo JSON dikhe, poora copy karo\n' +
+            '3. "JSON Paste" tab mein paste karo → Convert';
+          setStatus(msg, 'warn');
+        } else {
+          setStatus(msg, 'err');
+        }
+      } finally {
+        fetchBtn.disabled = false;
+        fetchBtn.textContent = '🔗 Fetch & Convert';
+      }
+    }
+
+    fetchBtn.addEventListener('click', fetchFromVeed);
+    fetchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') fetchFromVeed();
+    });
+
+    fetchClear.addEventListener('click', () => {
+      fetchInput.value = '';
+      setStatus('Cleared.');
+    });
+
+    /* ============================================================
+       Convert (from paste)
+       ============================================================ */
+    function convert() {
+      const raw = inputEl.value.trim();
+      if (!raw) {
+        setStatus('⚠️ Pehle JSON paste karo.', 'err');
+        return;
+      }
+
+      let json;
+      try {
+        json = JSON.parse(raw);
+      } catch (e) {
+        setStatus('❌ JSON galat hai: ' + e.message, 'err');
+        return;
+      }
+
+      let cues;
+      try {
+        cues = extractCues(json);
+      } catch (e) {
+        setStatus('❌ ' + e.message, 'err');
+        return;
+      }
+
+      if (!cues.length) {
+        setStatus('⚠️ Koi subtitle cue nahi mila JSON mein.', 'err');
+        return;
+      }
+
+      const opts = {
+        merge: optMerge.checked,
+        clean: optClean.checked,
+        endFix: optEndFix.checked
+      };
+
+      const { vtt, count } = buildVTT(cues, opts);
+      currentVtt = vtt;
+      outputEl.value = vtt;
+      statEl.textContent = `${count} cues · ${vtt.split('\n').length} lines`;
+
+      downloadVttBtn.disabled = false;
+      downloadSrtBtn.disabled = false;
+      copyBtn.disabled = false;
+
+      setStatus(`✅ Convert ho gaya! ${count} cues bane. Ab download karo.`, 'ok');
+    }
+
+    convertBtn.addEventListener('click', convert);
+
+    downloadVttBtn.addEventListener('click', () => {
+      if (!currentVtt) return;
+      download(currentVtt, 'subtitles.vtt', 'text/vtt;charset=utf-8');
+      setStatus('✅ subtitles.vtt download ho gayi.', 'ok');
+    });
+
+    downloadSrtBtn.addEventListener('click', () => {
+      if (!currentVtt) return;
+      download(vttToSrt(currentVtt), 'subtitles.srt', 'application/x-subrip;charset=utf-8');
+      setStatus('✅ subtitles.srt download ho gayi.', 'ok');
+    });
+
+    copyBtn.addEventListener('click', () => {
+      if (!currentVtt) return;
+      navigator.clipboard.writeText(currentVtt)
+        .then(() => setStatus('📋 VTT copy ho gaya.', 'ok'))
+        .catch(() => setStatus('❌ Copy fail.', 'err'));
+    });
+
+    [optMerge, optClean, optEndFix].forEach(cb => {
+      cb.addEventListener('change', () => {
+        if (inputEl.value.trim() && currentVtt) convert();
+      });
+    });
+
+    inputEl.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') convert();
+    });
+  </script>
+
+</body>
+
+</html>
